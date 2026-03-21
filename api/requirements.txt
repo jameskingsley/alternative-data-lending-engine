@@ -1,0 +1,19 @@
+# Web Server & API
+fastapi
+uvicorn
+pydantic
+requests
+
+# Data Science Stack
+pandas
+numpy
+scikit-learn
+LightGBM
+joblib
+
+# MLOps & Explainability
+clearml
+shap
+
+# Utilities
+python-multipart

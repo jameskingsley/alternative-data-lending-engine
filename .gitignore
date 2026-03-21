@@ -1,0 +1,16 @@
+# Data and Models
+data/
+models/*.pkl
+models/*.joblib
+
+# Python and OS
+__pycache__/
+*.py[cod]
+.env
+.venv
+venv/
+.DS_Store
+
+# IDE and Notebooks
+.vscode/
+.ipynb_checkpoints/

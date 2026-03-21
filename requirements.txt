@@ -1,0 +1,25 @@
+# Data Science Core
+pandas
+numpy
+scikit-learn
+lightgbm
+xgboost
+shap
+wbgapi  # World Bank API client
+
+# MLOps & Experiment Tracking
+clearml
+dagshub
+evidently
+
+# Backend & API
+fastapi
+uvicorn
+python-multipart
+requests
+python-dotenv
+
+# Frontend
+streamlit
+matplotlib
+seaborn
