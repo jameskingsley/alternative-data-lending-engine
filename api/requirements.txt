@@ -17,3 +17,4 @@ shap
 
 # Utilities
 python-multipart
+wbgapi
