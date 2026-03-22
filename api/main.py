@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import joblib
@@ -8,7 +9,7 @@ from src.data_processor import DataProcessor
 
 app = FastAPI(title="Lending Inference API")
 
-# Initialize ClearML Task for the Inference Service
+# Initialize ClearML Task
 Task.init(
     project_name='Micro-Lending Engine', 
     task_name='Inference Service', 
@@ -16,38 +17,48 @@ Task.init(
     reuse_last_task_id=True
 )
 
+# Configuration for Model Loading
+PROJECT_NAME = 'Micro-Lending Engine'
+MODEL_NAME = 'Lending-Engine-Winner'
+
 try:
-    print("📡 Querying ClearML Production Registry for 'Lending-Engine-Winner'...")
+    print(f"Querying ClearML Production Registry for '{MODEL_NAME}'...")
     
-    # This search finds the latest model based on the Name and Project
-    # 'only_published=True' ensures you only get the model you officially vetted
-    best_model_obj = Model.get_model(
-        project_name='Micro-Lending Engine',
-        model_name='Lending-Engine-Winner',
-        only_published=True
+    # method to find published models
+    models = Model.list_models(
+        project_name=PROJECT_NAME,
+        model_name=MODEL_NAME,
+        only_published=True,
+        order_by_field='created',
+        ascending=False
     )
 
-    if not best_model_obj:
-        raise ValueError("No 'Published' model found with name 'Lending-Engine-Winner'.")
+    if not models:
+        raise ValueError(f"No 'Published' model found with name '{MODEL_NAME}'.")
 
-    # Download to local cache and load into memory
+    # Get the latest published model
+    best_model_obj = models[0]
     model_path = best_model_obj.get_local_copy()
     model = joblib.load(model_path)
     
-    # Initialize SHAP for explainability
     explainer = shap.TreeExplainer(model)
-    print(f"✅ Success! Loaded Model ID: {best_model_obj.id} (Name: {best_model_obj.name})")
+    print(f"Success! Loaded Model ID: {best_model_obj.id}")
     
 except Exception as e:
-    print(f"⚠️ ClearML Registry Error: {e}")
-    # Local fallback to keep the service running in Enugu
+    print(f" ClearML Registry Error: {e}")
     try:
-        print("🔄 Attempting local fallback to 'models/best_lending_model.pkl'...")
-        model = joblib.load("models/best_lending_model.pkl")
+        print("Attempting local fallback...")
+        # Resolve path dynamically to handle Render's directory structure
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        fallback_path = os.path.join(base_dir, "models", "best_lending_model.pkl")
+        
+        print(f"Looking for fallback at: {fallback_path}")
+        model = joblib.load(fallback_path)
         explainer = shap.TreeExplainer(model)
-        print("✅ Local fallback successful.")
+        print("Local fallback successful.")
     except Exception as fallback_err:
-        raise RuntimeError(f"FATAL: Could not load model from ClearML or Local: {fallback_err}")
+        print(f" Fallback failed: {fallback_err}")
+        raise RuntimeError(f"FATAL: Could not load model: {fallback_err}")
 
 processor = DataProcessor()
 
@@ -57,7 +68,6 @@ class BorrowerData(BaseModel):
 @app.post("/predict")
 def predict(data: BorrowerData):
     try:
-        # Create DataFrame from JSON
         input_df = pd.DataFrame([data.features])
         
         # Real-time Macro Data Enrichment
@@ -65,15 +75,17 @@ def predict(data: BorrowerData):
         input_df['macro_inflation'] = macro_df.loc[macro_df['series'] == 'FP.CPI.TOTL.ZG', 'YR2024'].values[0]
         input_df['macro_gdp'] = macro_df.loc[macro_df['series'] == 'NY.GDP.MKTP.KD.ZG', 'YR2024'].values[0]
 
-        # Handle Column Alignment for XGBoost
+        # Column Alignment for XGBoost/Scikit-Learn
         if hasattr(model, "get_booster"):
             expected_cols = model.get_booster().feature_names
             input_df = input_df.reindex(columns=expected_cols, fill_value=0)
+        elif hasattr(model, "feature_names_in_"):
+            input_df = input_df.reindex(columns=model.feature_names_in_, fill_value=0)
         
-        # Generate Probability & Decision
+        # Prediction
         prob = model.predict_proba(input_df)[:, 1][0]
         
-        #  Explainability (SHAP Values)
+        # SHAP Explainability
         shap_values = explainer.shap_values(input_df)
         risk_factors = pd.Series(
             shap_values[0], 
@@ -85,7 +97,7 @@ def predict(data: BorrowerData):
             "decision": "APPROVED" if prob < 0.12 else "REJECTED",
             "risk_factors": risk_factors,
             "metadata": {
-                "registry_name": "Lending-Engine-Winner",
+                "registry_name": MODEL_NAME,
                 "inflation_rate": f"{input_df['macro_inflation'].values[0]:.2%}"
             }
         }
