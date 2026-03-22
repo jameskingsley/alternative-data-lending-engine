@@ -17,49 +17,37 @@ Task.init(
     reuse_last_task_id=True
 )
 
-# Configuration for Model Loading
 PROJECT_NAME = 'Micro-Lending Engine'
 MODEL_NAME = 'Lending-Engine-Winner'
 
-try:
-    print(f"Querying ClearML Production Registry for '{MODEL_NAME}'...")
+def load_registry_model():
+    print(f" Querying ClearML Production Registry for '{MODEL_NAME}'...")
     
-    # method to find published models
-    models = Model.list_models(
+    # Using query_models for better compatibility and search precision
+    models = Model.query_models(
         project_name=PROJECT_NAME,
         model_name=MODEL_NAME,
-        only_published=True,
-        order_by_field='created',
-        ascending=False
+        only_published=True
     )
 
     if not models:
-        raise ValueError(f"No 'Published' model found with name '{MODEL_NAME}'.")
+        raise RuntimeError(f"FATAL: No 'Published' model found in ClearML project '{PROJECT_NAME}' with name '{MODEL_NAME}'. Check your tags/status in the dashboard.")
 
-    # Get the latest published model
-    best_model_obj = models[0]
-    model_path = best_model_obj.get_local_copy()
-    model = joblib.load(model_path)
+    # Sort manually by creation date to ensure we get the latest 'Published' version
+    latest_model_obj = sorted(models, key=lambda x: x.created, reverse=True)[0]
     
-    explainer = shap.TreeExplainer(model)
-    print(f"Success! Loaded Model ID: {best_model_obj.id}")
+    print(f"Downloading Model ID: {latest_model_obj.id} from {latest_model_obj.url}")
+    model_path = latest_model_obj.get_local_copy()
     
-except Exception as e:
-    print(f" ClearML Registry Error: {e}")
-    try:
-        print("Attempting local fallback...")
-        # Resolve path dynamically to handle Render's directory structure
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        fallback_path = os.path.join(base_dir, "models", "best_lending_model.pkl")
-        
-        print(f"Looking for fallback at: {fallback_path}")
-        model = joblib.load(fallback_path)
-        explainer = shap.TreeExplainer(model)
-        print("Local fallback successful.")
-    except Exception as fallback_err:
-        print(f" Fallback failed: {fallback_err}")
-        raise RuntimeError(f"FATAL: Could not load model: {fallback_err}")
+    # Load into memory
+    loaded_model = joblib.load(model_path)
+    loaded_explainer = shap.TreeExplainer(loaded_model)
+    
+    print(f"Success! Connection established with model: {latest_model_obj.name}")
+    return loaded_model, loaded_explainer
 
+# Load model strictly from ClearML at startup
+model, explainer = load_registry_model()
 processor = DataProcessor()
 
 class BorrowerData(BaseModel):
@@ -75,7 +63,7 @@ def predict(data: BorrowerData):
         input_df['macro_inflation'] = macro_df.loc[macro_df['series'] == 'FP.CPI.TOTL.ZG', 'YR2024'].values[0]
         input_df['macro_gdp'] = macro_df.loc[macro_df['series'] == 'NY.GDP.MKTP.KD.ZG', 'YR2024'].values[0]
 
-        # Column Alignment for XGBoost/Scikit-Learn
+        # Handle Column Alignment
         if hasattr(model, "get_booster"):
             expected_cols = model.get_booster().feature_names
             input_df = input_df.reindex(columns=expected_cols, fill_value=0)
