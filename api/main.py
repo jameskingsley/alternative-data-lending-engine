@@ -1,13 +1,18 @@
 import os
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field
 import joblib
 import pandas as pd
 import shap
 from clearml import Task, Model 
 from src.data_processor import DataProcessor
 
-app = FastAPI(title="Lending Inference API")
+app = FastAPI(
+    title="Lending Inference API",
+    description="Real-time credit scoring engine powered by XGBoost and ClearML",
+    version="1.0.0"
+)
 
 # Initialize ClearML Task
 Task.init(
@@ -22,16 +27,13 @@ MODEL_NAME = 'Lending-Engine-Winner'
 
 def load_registry_model():
     print(f" Querying ClearML Production Registry for '{MODEL_NAME}'...")
-    
     try:
-        # Most direct way to get a single specific model by name/project
         best_model_obj = Model.get_model(
             project_name=PROJECT_NAME,
             model_name=MODEL_NAME,
             only_published=True
         )
     except Exception:
-        # Fallback to query_models if get_model fails
         models = Model.query_models(
             project_name=PROJECT_NAME,
             model_name=MODEL_NAME,
@@ -39,26 +41,37 @@ def load_registry_model():
         )
         if not models:
             raise RuntimeError(f"FATAL: No Published model '{MODEL_NAME}' found.")
-        
-        # Robust sort using the internal configuration timestamp
         best_model_obj = sorted(models, key=lambda x: x.last_update if hasattr(x, 'last_update') else 0, reverse=True)[0]
 
     print(f" Downloading Model ID: {best_model_obj.id}")
     model_path = best_model_obj.get_local_copy()
     
-    # Load and setup SHAP
     loaded_model = joblib.load(model_path)
     loaded_explainer = shap.TreeExplainer(loaded_model)
     
     print(f"Success! Connection established.")
     return loaded_model, loaded_explainer
 
-# Global model initialization
+# Global initialization
 model, explainer = load_registry_model()
 processor = DataProcessor()
 
 class BorrowerData(BaseModel):
-    features: dict 
+    # Swagger UI documentation
+    features: dict = Field(
+        ..., 
+        example={
+            "AMT_INCOME_TOTAL": 60000,
+            "AMT_CREDIT": 5000,
+            "DAYS_BIRTH": -12000,
+            "EXT_SOURCE_2": 0.5
+        }
+    )
+
+@app.get("/", include_in_schema=False)
+def root():
+    """Redirects home page to documentation."""
+    return RedirectResponse(url="/docs")
 
 @app.post("/predict")
 def predict(data: BorrowerData):
@@ -67,8 +80,11 @@ def predict(data: BorrowerData):
         
         # Real-time Macro Data Enrichment
         macro_df = processor.fetch_world_bank_data()
-        input_df['macro_inflation'] = macro_df.loc[macro_df['series'] == 'FP.CPI.TOTL.ZG', 'YR2024'].values[0]
-        input_df['macro_gdp'] = macro_df.loc[macro_df['series'] == 'NY.GDP.MKTP.KD.ZG', 'YR2024'].values[0]
+        inf_val = macro_df.loc[macro_df['series'] == 'FP.CPI.TOTL.ZG', 'YR2024'].values[0]
+        gdp_val = macro_df.loc[macro_df['series'] == 'NY.GDP.MKTP.KD.ZG', 'YR2024'].values[0]
+        
+        input_df['macro_inflation'] = inf_val
+        input_df['macro_gdp'] = gdp_val
 
         # Column Alignment
         if hasattr(model, "get_booster"):
@@ -92,7 +108,7 @@ def predict(data: BorrowerData):
             "risk_factors": risk_factors,
             "metadata": {
                 "registry_name": MODEL_NAME,
-                "inflation_rate": f"{input_df['macro_inflation'].values[0]:.2%}"
+                "inflation_rate": f"{inf_val:.2f}%" 
             }
         }
     except Exception as e:

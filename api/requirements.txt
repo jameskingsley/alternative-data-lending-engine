@@ -9,6 +9,7 @@ pandas
 numpy
 scikit-learn
 LightGBM
+xgboost
 joblib
 
 # MLOps & Explainability
