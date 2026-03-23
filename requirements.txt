@@ -1,4 +1,4 @@
-# Core Data Science (Versions that have wheels)
+# Core Data Stack
 numpy<2.0.0
 pandas>=2.0.0
 scikit-learn
@@ -6,19 +6,19 @@ xgboost
 shap
 lightgbm
 
-# API & Macro
+# MLOps & Monitoring
+clearml
+dagshub
+evidently
+
+# Deployment & Utilities
 fastapi
 uvicorn
 requests
 wbgapi
 python-dotenv
 
-# MLOps
-clearml
-dagshub
-evidently
-
-# Frontend (The stable pair)
+# Streamlit UI (Stable Match)
 streamlit==1.32.0
 altair==5.2.0
 matplotlib
