@@ -3,11 +3,11 @@
 An end-to-end Machine Learning pipeline designed for Real-time Credit Risk Assessment in emerging markets. This engine utilizes alternative behavioral markers and live macroeconomic data (Nigeria Inflation via World Bank API) to provide transparent, risk-adjusted default probabilities.
 
 ###### Live Production Links
-Frontend UI: Streamlit Dashboard — Interactive assessment & SHAP explainability.
+Frontend UI: (https://alternative-data-lending-engine-hyfvawe49kajnnyvtjgcfa.streamlit.app/) — Interactive assessment & SHAP explainability.
 
-Backend API: FastAPI on Render — High-performance inference engine.
+Backend API: https://alternative-data-lending-engine.onrender.com — High-performance inference engine.
 
-Observability: Evidently AI Cloud — Live Data Drift & Model Performance monitoring.
+Observability: https://app.evidently.cloud/v2/projects/019d0fee-0a7f-72dd-9eaa-a360e6cf8a42/dashboard — Live Data Drift & Model Performance monitoring.
 
 ###### Architecture & MLOps Maturity
 Modeling: Hybrid ensemble (XGBoost & LightGBM) optimized for imbalanced credit datasets.
